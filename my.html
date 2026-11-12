@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicPulse - AI Community Problem Mapper</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.3);
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+        }
+        /* Custom Pulse Animations */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .animate-pulse-ring {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+        /* Waveform simulation for speech recording */
+        .wave-bar {
+            animation: wave 1s infinite ease-in-out alternate;
+        }
+        .wave-bar:nth-child(1) { animation-delay: 0.1s; }
+        .wave-bar:nth-child(2) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.4s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.5s; }
+        @keyframes wave {
+            0% { height: 4px; }
+            100% { height: 24px; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-full flex flex-col transition-colors duration-200">
+
+    <!-- TOP HEADER / NAVBAR -->
+    <header class="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Brand Title -->
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-brand-600 rounded-xl text-white shadow-md shadow-brand-500/20">
+                        <i data-lucide="radio-tower" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="font-bold text-xl tracking-tight text-slate-900 dark:text-white">CivicPulse</h1>
+                            <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2 py-0.5 rounded dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">Live AI Engine</span>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">AI-Powered Community Complaint Deduplication & Mapping</p>
+                    </div>
+                </div>
+
+                <!-- Stats Bar & Mode Toggle -->
+                <div class="flex items-center gap-4 sm:gap-6">
+                    <!-- Quick Stats -->
+                    <div class="hidden lg:flex items-center gap-6 text-sm border-r border-slate-200 dark:border-slate-800 pr-6">
+                        <div class="text-center">
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Total Reports</span>
+                            <span id="stat-total" class="font-bold text-slate-900 dark:text-white text-base">0</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Active Hotspots</span>
+                            <span id="stat-hotspots" class="font-bold text-amber-600 dark:text-amber-400 text-base">0</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Resolved</span>
+                            <span id="stat-resolved" class="font-bold text-emerald-600 dark:text-emerald-400 text-base">0%</span>
+                        </div>
+                    </div>
+
+                    <!-- Dark Mode Toggle -->
+                    <button id="theme-toggle" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                        <i id="theme-icon-sun" data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+                        <i id="theme-icon-moon" data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN BODY GRID -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- LEFT COLUMN: SUBMISSION FORM & PIPELINE STATUS -->
+        <section class="lg:col-span-5 space-y-6">
+            
+            <!-- Complaint Submission Card -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <i data-lucide="mega-phone" class="w-5 h-5 text-brand-600 dark:text-brand-500"></i>
+                        Report an Issue
+                    </h2>
+                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Voice or Text</span>
+                </div>
+
+                <!-- One Click Quick Preset Buttons -->
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Try Sample Scenarios</label>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button type="button" class="preset-btn text-xs bg-slate-100 hover:bg-brand-50 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-brand-950 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-md transition text-left"
+                                data-text="Burst water pipeline flooding Main Street near Market" data-zone="Central Market">
+                            💧 Burst Water Pipe
+                        </button>
+                        <button type="button" class="preset-btn text-xs bg-slate-100 hover:bg-brand-50 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-brand-950 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-md transition text-left"
+                                data-text="Garbage overflow piling up near Sector 4 Park smell is horrible" data-zone="North Ward">
+                            🗑️ Garbage Pileup
+                        </button>
+                        <button type="button" class="preset-btn text-xs bg-slate-100 hover:bg-brand-50 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-brand-950 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-md transition text-left"
+                                data-text="Streetlights completely out along 5th Avenue causing extreme safety hazard" data-zone="Downtown">
+                            💡 Dark Streetlights
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Text / Speech Area -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label for="complaint-input" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Unstructured Complaint Text</label>
+                        
+                        <!-- Mic Recording Trigger Button -->
+                        <button id="mic-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-full font-medium hover:bg-red-100 transition border border-red-200 dark:border-red-800">
+                            <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                            <span id="mic-text">Voice Input</span>
+                        </button>
+                    </div>
+
+                    <!-- Voice Visualizer Box (Hidden by default) -->
+                    <div id="voice-visualizer" class="hidden flex items-center justify-center gap-1 bg-slate-900 text-white p-3 rounded-lg text-xs font-mono">
+                        <span class="mr-2 text-red-400 animate-pulse">● Listening...</span>
+                        <div class="wave-bar w-1 bg-red-500 rounded"></div>
+                        <div class="wave-bar w-1 bg-red-500 rounded"></div>
+                        <div class="wave-bar w-1 bg-red-500 rounded"></div>
+                        <div class="wave-bar w-1 bg-red-500 rounded"></div>
+                        <div class="wave-bar w-1 bg-red-500 rounded"></div>
+                    </div>
+
+                    <textarea id="complaint-input" rows="3" class="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none transition" placeholder="Type or dictate issue details... (e.g. 'Massive pothole near Central School damaging cars')"></textarea>
+                </div>
+
+                <!-- Location / Zone Preset Selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Location Zone</label>
+                    <select id="location-select" class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="Downtown">Downtown Sector (37.7749, -122.4194)</option>
+                        <option value="North Ward">North Ward Park (37.7833, -122.4167)</option>
+                        <option value="East District">East District Commercial (37.7695, -122.4014)</option>
+                        <option value="Central Market">Central Market Plaza (37.7785, -122.4120)</option>
+                        <option value="South Suburb">South Suburb Residential (37.7580, -122.4190)</option>
+                    </select>
+                </div>
+
+                <!-- Submit Button -->
+                <button id="submit-btn" type="button" class="w-full py-3 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-brand-500/20 flex items-center justify-center gap-2 transition disabled:opacity-50">
+                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                    <span>Submit & Run AI Pipeline</span>
+                </button>
+            </div>
+
+            <!-- AI Pipeline Step Visualizer Box -->
+            <div id="ai-pipeline-card" class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                    AI Engine Execution Pipeline
+                </h3>
+
+                <div class="space-y-2 text-xs font-mono">
+                    <div id="step-1" class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400">
+                        <span class="flex items-center gap-2"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> 1. Natural Language Parsing</span>
+                        <span class="step-status">Idle</span>
+                    </div>
+                    <div id="step-2" class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400">
+                        <span class="flex items-center gap-2"><i data-lucide="tag" class="w-3.5 h-3.5"></i> 2. Category & Severity Classification</span>
+                        <span class="step-status">Idle</span>
+                    </div>
+                    <div id="step-3" class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400">
+                        <span class="flex items-center gap-2"><i data-lucide="layers" class="w-3.5 h-3.5"></i> 3. Spatial Deduplication & Grouping</span>
+                        <span class="step-status">Idle</span>
+                    </div>
+                    <div id="step-4" class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400">
+                        <span class="flex items-center gap-2"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i> 4. Map Hotspot Clustering</span>
+                        <span class="step-status">Idle</span>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- RIGHT COLUMN: INTERACTIVE MAP & FEED DASHBOARD -->
+        <section class="lg:col-span-7 space-y-6">
+            
+            <!-- Map Card -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-base font-bold flex items-center gap-2">
+                            <i data-lucide="map" class="w-5 h-5 text-brand-600 dark:text-brand-500"></i>
+                            Live Hotspot Heatmap
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Complaints within ~100m are auto-grouped into cluster hotspots.</p>
+                    </div>
+
+                    <!-- Severity Legend -->
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Critical</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span> High</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Med</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Low</span>
+                    </div>
+                </div>
+
+                <!-- Leaflet Container -->
+                <div id="map" class="w-full h-80 rounded-xl border border-slate-200 dark:border-slate-800 z-10"></div>
+            </div>
+
+            <!-- Feed & Action Center -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+                
+                <!-- Filter & Search Control Bar -->
+                <div class="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+                    
+                    <!-- Search Input -->
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                        <input id="search-input" type="text" placeholder="Search keywords or locations..." class="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+
+                    <!-- Category Filter Buttons -->
+                    <div class="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                        <button class="filter-btn active-filter text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-medium transition" data-cat="ALL">All</button>
+                        <button class="filter-btn text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" data-cat="Water Supply">Water</button>
+                        <button class="filter-btn text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" data-cat="Waste Management">Waste</button>
+                        <button class="filter-btn text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" data-cat="Street Lighting">Lighting</button>
+                        <button class="filter-btn text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" data-cat="Road Repairs">Roads</button>
+                    </div>
+                </div>
+
+                <!-- Feed Cards Container -->
+                <div id="feed-container" class="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+                    <!-- Dynamic Feed Cards rendered by JS -->
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 py-4 text-center text-xs text-slate-500">
+        <p>CivicPulse AI Hackathon MVP &bull; Unstructured Community Feedback Transformation Platform</p>
+    </footer>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        // ==========================================
+        // 1. DATA MODELS & STATE MANAGEMENT
+        // ==========================================
+        
+        // Location Coordinates Map for Presets
+        const LOCATION_COORDS = {
+            "Downtown": { lat: 37.7749, lng: -122.4194 },
+            "North Ward": { lat: 37.7833, lng: -122.4167 },
+            "East District": { lat: 37.7695, lng: -122.4014 },
+            "Central Market": { lat: 37.7785, lng: -122.4120 },
+            "South Suburb": { lat: 37.7580, lng: -122.4190 }
+        };
+
+        // Seed Initial Mock Data
+        let complaintsData = [
+            {
+                id: 101,
+                rawText: "Water gushing out of broken pipe near Central Market plaza for 2 hours",
+                category: "Water Supply",
+                severity: "Critical",
+                locationName: "Central Market",
+                lat: 37.7785,
+                lng: -122.4120,
+                duplicatesCount: 3,
+                status: "Under Review",
+                timestamp: "10 mins ago"
+            },
+            {
+                id: 102,
+                rawText: "Uncollected trash bins overflowing in North Ward park playground",
+                category: "Waste Management",
+                severity: "Medium",
+                locationName: "North Ward",
+                lat: 37.7833,
+                lng: -122.4167,
+                duplicatesCount: 1,
+                status: "Open",
+                timestamp: "25 mins ago"
+            },
+            {
+                id: 103,
+                rawText: "Complete dark stretch along 5th Avenue streetlights out",
+                category: "Street Lighting",
+                severity: "High",
+                locationName: "Downtown",
+                lat: 37.7749,
+                lng: -122.4194,
+                duplicatesCount: 2,
+                status: "Open",
+                timestamp: "1 hour ago"
+            },
+            {
+                id: 104,
+                rawText: "Deep asphalt pothole damaging car tires near South Suburb junction",
+                category: "Road Repairs",
+                severity: "High",
+                locationName: "South Suburb",
+                lat: 37.7580,
+                lng: -122.4190,
+                duplicatesCount: 0,
+                status: "Resolved",
+                timestamp: "3 hours ago"
+            }
+        ];
+
+        let activeFilter = 'ALL';
+        let searchQuery = '';
+        let map = null;
+        let mapMarkers = [];
+
+        // Speech Recognition Setup
+        let isRecording = false;
+        let recognition = null;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+        }
+
+        // ==========================================
+        // 2. INITIALIZATION
+        // ==========================================
+        
+        window.onload = function() {
+            lucide.createIcons();
+            initTheme();
+            initMap();
+            renderStats();
+            renderFeed();
+            setupEventListeners();
+        };
+
+        // Theme Toggle Handler
+        function initTheme() {
+            const themeBtn = document.getElementById('theme-toggle');
+            themeBtn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+            });
+        }
+
+        // Initialize Leaflet Map
+        function initMap() {
+            // Centered on simulated city center
+            map = L.map('map').setView([37.7749, -122.4194], 13);
+
+            // OSM Tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            updateMapMarkers();
+        }
+
+        // Map Marker Updating & Cluster Visualization
+        function updateMapMarkers() {
+            // Clear existing markers
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+
+            complaintsData.forEach(item => {
+                // Color mapping for severity
+                let colorClass = '#3b82f6'; // Blue Low
+                if (item.severity === 'Medium') colorClass = '#f59e0b'; // Amber
+                if (item.severity === 'High') colorClass = '#f97316'; // Orange
+                if (item.severity === 'Critical') colorClass = '#ef4444'; // Red
+
+                // Create custom circular badge marker
+                const clusterBadge = item.duplicatesCount > 0 
+                    ? `<span style="position:absolute; top:-5px; right:-5px; background:#000; color:#fff; font-size:10px; font-weight:bold; border-radius:999px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; border:2px solid #fff;">+${item.duplicatesCount}</span>`
+                    : '';
+
+                const customIcon = L.divIcon({
+                    className: 'custom-leaflet-marker',
+                    html: `<div style="position:relative; width:28px; height:28px; background-color:${colorClass}; border-radius:50%; border:3px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); flex; align-items:center; justify-content:center;">
+                            ${clusterBadge}
+                           </div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const marker = L.marker([item.lat, item.lng], { icon: customIcon }).addTo(map);
+
+                // Marker Popup Content
+                const popupContent = `
+                    <div style="font-family: sans-serif; padding: 2px;">
+                        <span style="font-size:10px; font-weight:bold; padding:2px 6px; background:#e2e8f0; border-radius:4px; text-transform:uppercase;">${item.category}</span>
+                        <h4 style="font-weight:bold; font-size:13px; margin: 6px 0 2px 0;">${item.locationName}</h4>
+                        <p style="font-size:11px; color:#475569; margin-bottom:6px;">"${item.rawText}"</p>
+                        <div style="font-size:10px; color:#64748b;">
+                            <strong>Severity:</strong> ${item.severity} <br/>
+                            <strong>Cluster Merges:</strong> ${item.duplicatesCount} duplicate report(s)
+                        </div>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                mapMarkers.push(marker);
+            });
+        }
+
+        // ==========================================
+        // 3. AI CLASSIFICATION & DEDUPLICATION ENGINE
+        // ==========================================
+        
+        function runAIPipeline(text, locationName) {
+            const steps = ['step-1', 'step-2', 'step-3', 'step-4'];
+            let currentStep = 0;
+
+            // UI Pipeline Execution Animation
+            const interval = setInterval(() => {
+                if (currentStep > 0) {
+                    const prevEl = document.getElementById(steps[currentStep - 1]);
+                    prevEl.className = "flex items-center justify-between p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800";
+                    prevEl.querySelector('.step-status').innerText = "Completed ✓";
+                }
+
+                if (currentStep < steps.length) {
+                    const currEl = document.getElementById(steps[currentStep]);
+                    currEl.className = "flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 animate-pulse border border-amber-200 dark:border-amber-800";
+                    currEl.querySelector('.step-status').innerText = "Processing...";
+                    currentStep++;
+                } else {
+                    clearInterval(interval);
+                    
+                    // Finalize AI processing logic
+                    processComplaintLogic(text, locationName);
+                    
+                    // Reset pipeline UI after delay
+                    setTimeout(() => {
+                        steps.forEach(id => {
+                            const el = document.getElementById(id);
+                            el.className = "flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400";
+                            el.querySelector('.step-status').innerText = "Idle";
+                        });
+                        document.getElementById('submit-btn').disabled = false;
+                        document.getElementById('complaint-input').value = '';
+                    }, 1500);
+                }
+            }, 500);
+        }
+
+        function processComplaintLogic(text, locationName) {
+            const textLower = text.toLowerCase();
+
+            // 1. Heuristic AI Categorization
+            let category = "Public Safety";
+            if (textLower.includes("water") || textLower.includes("pipe") || textLower.includes("flood") || textLower.includes("leak")) {
+                category = "Water Supply";
+            } else if (textLower.includes("trash") || textLower.includes("garbage") || textLower.includes("waste") || textLower.includes("smell")) {
+                category = "Waste Management";
+            } else if (textLower.includes("light") || textLower.includes("dark") || textLower.includes("lamp") || textLower.includes("electricity")) {
+                category = "Street Lighting";
+            } else if (textLower.includes("road") || textLower.includes("pothole") || textLower.includes("asphalt") || textLower.includes("traffic")) {
+                category = "Road Repairs";
+            }
+
+            // 2. Heuristic Severity Scoring
+            let severity = "Low";
+            if (textLower.includes("hazard") || textLower.includes("burst") || textLower.includes("danger") || textLower.includes("critical") || textLower.includes("flooding")) {
+                severity = "Critical";
+            } else if (textLower.includes("dark") || textLower.includes("overflow") || textLower.includes("damage") || textLower.includes("urgent")) {
+                severity = "High";
+            } else if (textLower.includes("piling") || textLower.includes("smell") || textLower.includes("broken")) {
+                severity = "Medium";
+            }
+
+            const targetCoords = LOCATION_COORDS[locationName] || LOCATION_COORDS["Downtown"];
+            // Add slight jitter for unique placement if needed
+            const lat = targetCoords.lat + (Math.random() - 0.5) * 0.002;
+            const lng = targetCoords.lng + (Math.random() - 0.5) * 0.002;
+
+            // 3. Smart Deduplication Check
+            // Check if existing open complaint is in same location AND same category (Distance ~0.01 lat/lng)
+            const existingIndex = complaintsData.findIndex(item => {
+                const distance = Math.sqrt(Math.pow(item.lat - lat, 2) + Math.pow(item.lng - lng, 2));
+                return distance < 0.015 && item.category === category && item.status !== "Resolved";
+            });
+
+            if (existingIndex !== -1) {
+                // Merge/Group into existing cluster hotspot
+                complaintsData[existingIndex].duplicatesCount += 1;
+                complaintsData[existingIndex].rawText = `${complaintsData[existingIndex].rawText} | Latest note: ${text}`;
+                // Upgrade severity if new report is higher
+                if (severity === "Critical") complaintsData[existingIndex].severity = "Critical";
+            } else {
+                // Create New Hotspot Record
+                const newComplaint = {
+                    id: Date.now(),
+                    rawText: text,
+                    category: category,
+                    severity: severity,
+                    locationName: locationName,
+                    lat: lat,
+                    lng: lng,
+                    duplicatesCount: 0,
+                    status: "Open",
+                    timestamp: "Just now"
+                };
+                complaintsData.unshift(newComplaint);
+            }
+
+            // Refresh UI Views
+            renderStats();
+            renderFeed();
+            updateMapMarkers();
+        }
+
+        // ==========================================
+        // 4. RENDERERS & EVENT LISTENERS
+        // ==========================================
+
+        function renderStats() {
+            const total = complaintsData.length;
+            const activeHotspots = complaintsData.filter(i => i.status !== "Resolved").length;
+            const resolvedCount = complaintsData.filter(i => i.status === "Resolved").length;
+            const resolvedPercent = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-hotspots').innerText = activeHotspots;
+            document.getElementById('stat-resolved').innerText = `${resolvedPercent}%`;
+        }
+
+        function renderFeed() {
+            const container = document.getElementById('feed-container');
+            container.innerHTML = '';
+
+            // Filter logic
+            let filtered = complaintsData.filter(item => {
+                const matchesCat = (activeFilter === 'ALL' || item.category === activeFilter);
+                const matchesSearch = item.rawText.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                      item.locationName.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesCat && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-xs">
+                        No reports matching your active filters.
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(item => {
+                // Badge Styles
+                let severityBadge = "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+                if (item.severity === "Medium") severityBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+                if (item.severity === "High") severityBadge = "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300";
+                if (item.severity === "Critical") severityBadge = "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+
+                const card = document.createElement('div');
+                card.className = "p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 transition hover:border-slate-300 dark:hover:border-slate-700";
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${item.category}</span>
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded ${severityBadge}">${item.severity}</span>
+                                ${item.duplicatesCount > 0 ? `<span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1"><i data-lucide="layers" class="w-3 h-3"></i> ${item.duplicatesCount} Merged Reports</span>` : ''}
+                            </div>
+                            <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5 mt-1">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-brand-600"></i> ${item.locationName}
+                            </h3>
+                        </div>
+                        <span class="text-xs text-slate-400 whitespace-nowrap">${item.timestamp}</span>
+                    </div>
+
+                    <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-white dark:bg-slate-950 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                        "${item.rawText}"
+                    </p>
+
+                    <div class="flex items-center justify-between pt-1 text-xs">
+                        <span class="text-slate-500 flex items-center gap-1">
+                            Status: <strong class="${item.status === 'Resolved' ? 'text-emerald-600' : 'text-amber-600'}">${item.status}</strong>
+                        </span>
+
+                        <div class="flex items-center gap-2">
+                            <button onclick="toggleStatus(${item.id})" class="px-2.5 py-1 text-xs rounded-md bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition font-medium">
+                                ${item.status === 'Resolved' ? 'Reopen' : 'Mark Resolved'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Toggle Status Action
+        window.toggleStatus = function(id) {
+            const index = complaintsData.findIndex(i => i.id === id);
+            if (index !== -1) {
+                complaintsData[index].status = complaintsData[index].status === 'Resolved' ? 'Open' : 'Resolved';
+                renderStats();
+                renderFeed();
+                updateMapMarkers();
+            }
+        };
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            // Preset Button Clicks
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const target = e.currentTarget;
+                    document.getElementById('complaint-input').value = target.getAttribute('data-text');
+                    document.getElementById('location-select').value = target.getAttribute('data-zone');
+                });
+            });
+
+            // Submit Button
+            document.getElementById('submit-btn').addEventListener('click', () => {
+                const text = document.getElementById('complaint-input').value.trim();
+                const location = document.getElementById('location-select').value;
+
+                if (!text) {
+                    alert("Please enter or dictate a complaint first.");
+                    return;
+                }
+
+                document.getElementById('submit-btn').disabled = true;
+                runAIPipeline(text, location);
+            });
+
+            // Mic Voice Input Trigger
+            const micBtn = document.getElementById('mic-btn');
+            const visualizer = document.getElementById('voice-visualizer');
+
+            micBtn.addEventListener('click', () => {
+                if (!recognition) {
+                    alert("Web Speech API is not supported in this browser. Please type your complaint.");
+                    return;
+                }
+
+                if (!isRecording) {
+                    recognition.start();
+                    isRecording = true;
+                    visualizer.classList.remove('hidden');
+                    document.getElementById('mic-text').innerText = "Stop Dictating";
+                } else {
+                    recognition.stop();
+                    isRecording = false;
+                    visualizer.classList.add('hidden');
+                    document.getElementById('mic-text').innerText = "Voice Input";
+                }
+            });
+
+            if (recognition) {
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('complaint-input').value = transcript;
+                    visualizer.classList.add('hidden');
+                    isRecording = false;
+                    document.getElementById('mic-text').innerText = "Voice Input";
+                };
+
+                recognition.onerror = function(event) {
+                    console.error("Speech Recognition Error", event.error);
+                    visualizer.classList.add('hidden');
+                    isRecording = false;
+                    document.getElementById('mic-text').innerText = "Voice Input";
+                };
+            }
+
+            // Category Filter Click Handlers
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-btn').forEach(b => {
+                        b.className = "filter-btn text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition";
+                    });
+                    
+                    const target = e.currentTarget;
+                    target.className = "filter-btn active-filter text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-medium transition";
+                    
+                    activeFilter = target.getAttribute('data-cat');
+                    renderFeed();
+                });
+            });
+
+            // Live Search Input Handler
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                searchQuery = e.target.value;
+                renderFeed();
+            });
+        }
+    </script>
+</body>
+</html>
